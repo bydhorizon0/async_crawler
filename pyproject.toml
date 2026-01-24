@@ -1,0 +1,11 @@
+[project]
+name = "async-cralwer"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.14"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "black>=26.1.0",
+    "httpx>=0.28.1",
+    "playwright>=1.57.0",
+]
