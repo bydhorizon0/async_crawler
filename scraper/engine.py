@@ -24,15 +24,14 @@ async def worker(queue: Queue, browser: Browser, db_mgr: DatabaseManager):
             try:
                 await scrape(page, target)
                 await asyncio.sleep(random.uniform(2.2, 5.7))
-            except playwright.async_api.TimeoutError as e:
-                pass
-            except playwright.async_api.WebError as e:
-                pass
-            except playwright.async_api.Error as e:
-                print(e)
-            except Exception as e:
-                print(e)
+            except (playwright.async_api.Error, Exception) as e:
+                print(f"[수집 실패] {target.site_name}({target.seq}): {e}")
+
+                error_msg = str(e)
+                # await db_mgr.insert_scrap_error(target.seq, error_msg)
             finally:
+                # queue.task_done()이 호출되지 않으면 queue.join()은 작업이 남은 줄 알고 계속 대기하게 된다.
+                # 실패 상황에서도 반드시 호출되어야 프로그램이 정상 종료된다.
                 queue.task_done()
     finally:
         await page.close()  # page 누수 방지를 위해 반드시 종료
@@ -50,7 +49,16 @@ async def scrape(page: Page, target: ScrapTarget):
             id_match = re.search(target.id_regex, id_str)
             if not id_match:
                 raise playwright.async_api.Error("ID 정규표현식 실패")
-            target_id = id_match.group(1)
-            print(
-                f"{target.site_name}({target.seq}) 수집 {title.strip()}, {target.detail_url_format.format(target_id)}"
-            )
+                # 서울시를 담당하는 worker에서 ID 정규표현식 실패하면 서울시를 담당하는 worker만 종료되는거 아니야?
+            # format(*target_ids)로 1개 이상도 유연하게 처리
+            target_ids = id_match.groups()
+
+            # 만약 정규식에 괄호가 없어서 groups()가 비어있다면, 매칭된 전체 문자열을 사용하도록 방어 로직 추가
+            if not target_ids:
+                target_ids = (id_match.group(),)
+
+            try:
+                detail_url = target.detail_url_format.format(*target_ids)
+                print(f"{target.site_name}({target.seq}) 수집 {title.strip()}, {detail_url}")
+            except IndexError:
+                print(f"[{target.site_name}] URL 포맷팅 실패: 인자 개수 불일치")
