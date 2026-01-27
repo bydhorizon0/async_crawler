@@ -9,3 +9,6 @@ dependencies = [
     "httpx>=0.28.1",
     "playwright>=1.57.0",
 ]
+
+[tool.black]
+line-length = 100
