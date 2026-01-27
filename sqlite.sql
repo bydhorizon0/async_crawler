@@ -38,7 +38,7 @@ VALUES (
         '//*[@id="seoul-integrated-board"]/table/tbody/tr',
         'td[2]/a',
         'href',
-        'fnTbbsView\(''\d+''\)',
+        'fnTbbsView\(''(\d+)''\)',
         'td[2]/a'
        );
 
@@ -52,7 +52,7 @@ VALUES (
         '//*[@id="contents"]/div[2]/table/tbody/tr',
         'td[2]/a',
         'href',
-        'sno=\d+&',
+        'sno=(\d+)&',
         'td[2]/a'
        );
 
@@ -66,7 +66,7 @@ VALUES (
         '//*[@id="contents_inner"]/div[3]/table/tbody/tr',
         'td[2]/a',
         'href',
-        '.\/\d+.ulsan',
+        '.\/(\d+).ulsan',
         'td[2]/a'
        );
 
