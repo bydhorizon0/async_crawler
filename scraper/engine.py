@@ -39,26 +39,39 @@ async def worker(queue: Queue, browser: Browser, db_mgr: DatabaseManager):
 
 async def scrape(page: Page, target: ScrapTarget):
     for i in range(1, 4):
-        await page.goto(target.site_url.format(i), timeout=30_000, wait_until="domcontentloaded")
+        if target.pagination_path:
+            await page.goto(target.site_url)
+            await page.locator(target.pagination_path).nth(i).click()
+        else:
+            await page.goto(
+                target.site_url.format(i), timeout=30_000, wait_until="domcontentloaded"
+            )
 
         items = await page.locator(target.list_path).all()
         for item in items:
             title = await item.locator(target.title_path).inner_text()
             id_str = await item.locator(target.id_path).get_attribute(target.id_attr)
 
-            id_match = re.search(target.id_regex, id_str)
-            if not id_match:
-                raise playwright.async_api.Error("ID 정규표현식 실패")
-                # 서울시를 담당하는 worker에서 ID 정규표현식 실패하면 서울시를 담당하는 worker만 종료되는거 아니야?
-            # format(*target_ids)로 1개 이상도 유연하게 처리
-            target_ids = id_match.groups()
+            if id_str is None:
+                raise playwright.async_api.Error("ID attributes is None")
 
-            # 만약 정규식에 괄호가 없어서 groups()가 비어있다면, 매칭된 전체 문자열을 사용하도록 방어 로직 추가
-            if not target_ids:
-                target_ids = (id_match.group(),)
+            format_args: tuple[str, ...] = ()
+
+            if target.id_regex:
+                id_match = re.search(target.id_regex, id_str)
+
+                if not id_match:
+                    raise playwright.async_api.Error("ID 정규표현식 실패")
+                # format(*target_ids)로 1개 이상도 유연하게 처리
+                target_ids = id_match.groups()
+
+                # 만약 정규식에 괄호가 없어서 groups()가 비어있다면, 매칭된 전체 문자열을 사용하도록 방어 로직 추가
+                format_args = target_ids if target_ids else (id_match.group(),)
+            else:
+                format_args = (id_str,)
 
             try:
-                detail_url = target.detail_url_format.format(*target_ids)
+                detail_url = target.detail_url_format.format(*format_args)
                 print(f"{target.site_name}({target.seq}) 수집 {title.strip()}, {detail_url}")
             except IndexError:
                 print(f"[{target.site_name}] URL 포맷팅 실패: 인자 개수 불일치")

@@ -4,6 +4,7 @@ from typing import NamedTuple
 class ScrapTarget(NamedTuple):
     seq: int
     type: str
+    pagination_path: str
     site_url: str
     site_name: str
     detail_url_format: str
