@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Literal
 
 import aiosqlite
 
@@ -41,28 +41,29 @@ class DatabaseManager:
             await db.executemany(query, params)
             await db.commit()
 
-    async def _fetch_rows(self, query: str):
+    async def _fetch_rows(self, query: str, *params):
         async with aiosqlite.connect(self.db_path) as db:
             # 결과를 컬럼명 기반으로 접근할 수 있게 해줌 (Row 객체)
             db.row_factory = aiosqlite.Row
-            async with db.execute(query) as cursor:
+            async with db.execute(query, (*params,)) as cursor:
                 rows = await cursor.fetchall()
 
                 # NamedTuple은 *row 언패킹이 가장 빠르고 깔끔하다. (중요! Select 순서와 NamedTuple의 순서가 일치해야 함!!!!)
                 return [ScrapTarget(*row) for row in rows]
 
-    async def select_scrap_targets(self) -> list[ScrapTarget]:
+    async def select_scrap_targets(self, target_type: Literal["PAGE", "API"]) -> list[ScrapTarget]:
         """
         가져오는 데이터의 개수가 적을 땐 한꺼번에 가져와도 되지만,
         데이터의 양이 많아지고, 데이터를 가져오자마자 워커를 돌리고 싶을 때는 비동기 제너레이터(async for)를 사용하자
         :return:
         """
-        query = """
-            SELECT seq, type, site_url, site_name, detail_url_format, list_path, id_path, id_attr, id_regex, title_path
-            FROM scrap_targets
+        query = f"""
+            SELECT seq, type, pagination_path, site_url, site_name, detail_url_format, list_path, id_path, id_attr, id_regex, title_path
+            FROM scrap_targets AS targets
+            WHERE targets.type = ?
         """
 
-        return await self._fetch_rows(query)
+        return await self._fetch_rows(query, target_type)
 
     async def save_scrap_result(self, results: list[ScrapResult]) -> None:
         query = """
