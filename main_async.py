@@ -1,8 +1,7 @@
 import asyncio
-from asyncio import Queue
 from typing import Final
 
-from playwright.async_api import async_playwright, Page
+from playwright.async_api import Page, async_playwright
 
 from core.database import DatabaseManager, ScrapTarget
 from scraper.engine import worker
@@ -18,8 +17,8 @@ async def main():
 
     targets = await db_mgr.select_scrap_targets("PAGE")
 
-    queue: Queue[ScrapTarget | None] = asyncio.Queue()
-    page_queue: Queue[Page] = asyncio.Queue()
+    queue: asyncio.Queue[ScrapTarget | None] = asyncio.Queue()
+    page_queue: asyncio.Queue[Page] = asyncio.Queue()
 
     # 수집 목록 큐
     for t in targets:
@@ -53,6 +52,7 @@ async def main():
 
         for context in contexts:
             await context.close()
+
         await browser.close()
 
 

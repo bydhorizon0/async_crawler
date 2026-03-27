@@ -1,6 +1,5 @@
 import asyncio
 import re
-from asyncio import Queue
 
 import playwright
 from playwright.async_api import Page
@@ -8,13 +7,12 @@ from playwright.async_api import Page
 from core.database import DatabaseManager
 from models.scrap_target import ScrapTarget
 
-
 semaphore = asyncio.Semaphore(3)
 
 
 async def worker(
-    queue: Queue[ScrapTarget | None],
-    page_queue: Queue[Page],
+    queue: asyncio.Queue[ScrapTarget | None],
+    page_queue: asyncio.Queue[Page],
     db_mgr: DatabaseManager,
 ) -> None:
     while True:
@@ -35,28 +33,48 @@ async def worker(
             error_msg = str(e)
             # await db_mgr.insert_scrap_error(target.seq, error_msg)
         finally:
+            await page.goto("about:blank")
+            await page.context.clear_cookies()
+            await page_queue.put(page)  # Page를 queue에 다시 반납
             # queue.task_done()이 호출되지 않으면 queue.join()은 작업이 남은 줄 알고 계속 대기하게 된다.
             # 실패 상황에서도 반드시 호출되어야 프로그램이 정상 종료된다.
-            await page_queue.put(page)  # 다시 반납
             queue.task_done()
 
 
-async def scrape(page: Page, target: ScrapTarget):
+async def scrape(page: Page, target: ScrapTarget) -> None:
     for i in range(1, 4):
         if target.pagination_path:
             async with semaphore:
-                await page.goto(target.site_url)
+                await page.goto(target.site_url, wait_until="domcontentloaded")
 
-            await page.locator(target.pagination_path).nth(i).click()
+            locator = page.locator(target.pagination_path)
+
+            if await locator.count() <= 1:
+                break
+
+            await locator.nth(i).click()
+            # await page.wait_for_selector()
         else:
             await page.goto(
                 target.site_url.format(i), timeout=30_000, wait_until="domcontentloaded"
             )
 
-        items = await page.locator(target.list_path).all()
-        for item in items:
-            title = await item.locator(target.title_path).inner_text()
-            id_str = await item.locator(target.id_path).get_attribute(target.id_attr)
+        locator = page.locator(target.list_path)
+        await locator.first.wait_for(state="visible", timeout=30_000)
+
+        count = await locator.count()
+
+        if count == 0:
+            return
+
+        for list_idx in range(count):
+            item = locator.nth(list_idx)
+
+            title_locator = item.locator(target.title_path)
+            id_locator = item.locator(target.id_path)
+
+            title = (await title_locator.text_content()) or ""
+            id_str = await id_locator.get_attribute(target.id_attr)
 
             if id_str is None:
                 raise playwright.async_api.Error("ID attributes is None")
